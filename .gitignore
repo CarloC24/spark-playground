@@ -1,4 +1,5 @@
 target/
+maven-target/
 project/target/
 project/project/
 .bsp/

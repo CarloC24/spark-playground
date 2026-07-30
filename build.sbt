@@ -31,6 +31,11 @@ lazy val root = (project in file("."))
       "org.apache.spark" %% "spark-core" % sparkVersion,
       "org.apache.spark" %% "spark-sql"  % sparkVersion
     ),
+    // Maven owns src/main/java (see pom.xml); sbt compiles only Scala. Without this,
+    // sbt also picks up the Java sources and `sbt run` becomes ambiguous because it
+    // finds two main classes.
+    Compile / unmanagedSourceDirectories := Seq((Compile / scalaSource).value),
+
     // Spark must run in its own JVM so the --add-opens flags above take effect.
     run / fork    := true,
     Test / fork   := true,

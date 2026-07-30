@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>playground</groupId>
+  <artifactId>spark-playground-java</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+  <name>spark-playground-java</name>
+  <description>Java Spark job that parses 5 person records from JSON</description>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Spark 4 supports Java 17 and 21 only. Targeting release 21 works even when
+         Maven itself runs on a newer JDK (this machine's default is 26). -->
+    <maven.compiler.release>21</maven.compiler.release>
+
+    <spark.version>4.2.0</spark.version>
+    <scala.binary.version>2.13</scala.binary.version>
+
+    <!-- Spark must RUN on JDK 21 regardless of which JDK compiled it, so the exec
+         plugin below invokes this JDK explicitly. Override with
+         -Dspark.java.home=/path/to/jdk if yours lives elsewhere. -->
+    <spark.java.home>/usr/local/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home</spark.java.home>
+
+    <main.class>playground.ParsePeopleJava</main.class>
+
+    <!-- Override with: mvn exec:exec -Dinput.json=path/to/other.json -->
+    <input.json>src/main/resources/people.json</input.json>
+  </properties>
+
+  <dependencies>
+    <!-- Java uses the same Scala-built Spark artifacts, hence the _2.13 suffix. -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${spark.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${spark.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <!-- Deliberately NOT "target": sbt owns target/, and `mvn clean` would otherwise
+         wipe the Scala build's output (and vice versa). -->
+    <directory>maven-target</directory>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.14.0</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.5.0</version>
+        <configuration>
+          <!-- exec:exec (not exec:java) so Spark gets its own JVM with the
+               add-opens flags below, on the JDK 21 pinned above. -->
+          <executable>${spark.java.home}/bin/java</executable>
+          <arguments>
+            <argument>--add-opens=java.base/java.lang=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.io=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.net=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.nio=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.util=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/sun.nio.cs=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/sun.security.action=ALL-UNNAMED</argument>
+            <argument>--add-opens=java.base/sun.util.calendar=ALL-UNNAMED</argument>
+            <argument>-Djdk.reflect.useDirectMethodHandle=false</argument>
+            <argument>-Dio.netty.tryReflectionSetAccessible=true</argument>
+            <argument>-classpath</argument>
+            <classpath/>
+            <argument>${main.class}</argument>
+            <argument>${input.json}</argument>
+          </arguments>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>
