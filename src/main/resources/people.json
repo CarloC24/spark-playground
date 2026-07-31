@@ -1,7 +1,42 @@
 [
-  { "id": 1, "name": "Amara Okonkwo",  "email": "amara.okonkwo@example.com",  "age": 34, "city": "Lagos" },
-  { "id": 2, "name": "Bjorn Halvorsen", "email": "bjorn.halvorsen@example.com", "age": 41, "city": "Oslo" },
-  { "id": 3, "name": "Chen Wei",        "email": "chen.wei@example.com",        "age": 29, "city": "Shanghai" },
-  { "id": 4, "name": "Divya Raman",     "email": "divya.raman@example.com",     "age": 37, "city": "Bengaluru" },
-  { "id": 5, "name": "Elena Rossi",     "email": "elena.rossi@example.com",     "age": 52, "city": "Milan" }
+  {
+    "id": 1,
+    "name": "Amara Okonkwo",
+    "email": "amara.okonkwo@example.com",
+    "age": 34,
+    "city": "Lagos",
+    "Hobbies": [{"hobbieName": "basketball"}, {"hobbieName": "tennis"}]
+  },
+  {
+    "id": 2,
+    "name": "Bjorn Halvorsen",
+    "email": "bjorn.halvorsen@example.com",
+    "age": 41,
+    "city": "Oslo",
+    "Hobbies": {"hobbieName": "wrestling"}
+  },
+  {
+    "id": 3,
+    "name": "Chen Wei",
+    "email": "chen.wei@example.com",
+    "age": 29,
+    "city": "Shanghai",
+    "hobbies": [{"hobbieName": "basketball"}, {"hobbieName": "tennis"}]
+  },
+  {
+    "id": 4,
+    "name": "Divya Raman",
+    "email": "divya.raman@example.com",
+    "age": 37,
+    "city": "Bengaluru",
+    "hobbies": {"hobbieName": "wrestling"}
+  },
+  {
+    "id": 5,
+    "name": "Elena Rossi",
+    "email": "elena.rossi@example.com",
+    "age": 52,
+    "city": "Milan",
+    "Hobbies": {"hobbieName": "wrestling"}
+  }
 ]
