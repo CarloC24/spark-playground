@@ -126,45 +126,45 @@ object ParsePeople {
     // stripped. to_json prints the column as the JSON it actually is, so the objects
     // come out as {"hobbieName":"basketball"} rather than a bare value.
     people.withColumn("hobbies", to_json(col("hobbies"))).show(truncate = false)
-
-    // Proof the rows really are typed Person objects, not just Rows.
-    people.collect().foreach { p =>
-      println(s"${p.id}: ${p.name} (${p.age}) — ${p.city} — hobbies: ${asJson(p.hobbies)}")
-    }
-
-    // The whole point: every row is an array now, regardless of how the JSON spelled
-    // the key or shaped the value. Nothing should be null, and nothing a bare struct.
-    val notAnArray = people.filter(col("hobbies").isNull).count()
-    println(s"Rows where hobbies is not an array: $notAnArray")
-    println("Hobby counts per row: " + people.select(size(col("hobbies")))
-      .collect().map(_.getInt(0)).mkString(", "))
-
-    // ---- a second, reshaped frame built from the same records ----
-
-    // Typed route: map each Person to a PersonSummary. The compiler checks the
-    // shape, and `import spark.implicits._` supplies the encoder for the result.
-    val summaries: Dataset[PersonSummary] = people.map { p =>
-      PersonSummary(
-        name = p.name,
-        ageGroup = if (p.age < 35) "under-35" else "35-plus",
-        emailDomain = p.email.split("@").last
-      )
-    }
-
-    println("Summaries (typed, via map):")
-    summaries.printSchema()
-    summaries.show(truncate = false)
-
-    // Untyped route: the same frame from column expressions. No case class needed,
-    // but a typo in a column name only blows up at runtime.
-    val summariesDf: DataFrame = people.toDF().select(
-      col("name"),
-      when(col("age") < 35, "under-35").otherwise("35-plus").as("ageGroup"),
-      substring_index(col("email"), "@", -1).as("emailDomain")
-    )
-
-    println("Summaries (untyped, via select):")
-    summariesDf.show(truncate = false)
+//
+//    // Proof the rows really are typed Person objects, not just Rows.
+//    people.collect().foreach { p =>
+//      println(s"${p.id}: ${p.name} (${p.age}) — ${p.city} — hobbies: ${asJson(p.hobbies)}")
+//    }
+//
+//    // The whole point: every row is an array now, regardless of how the JSON spelled
+//    // the key or shaped the value. Nothing should be null, and nothing a bare struct.
+//    val notAnArray = people.filter(col("hobbies").isNull).count()
+//    println(s"Rows where hobbies is not an array: $notAnArray")
+//    println("Hobby counts per row: " + people.select(size(col("hobbies")))
+//      .collect().map(_.getInt(0)).mkString(", "))
+//
+//    // ---- a second, reshaped frame built from the same records ----
+//
+//    // Typed route: map each Person to a PersonSummary. The compiler checks the
+//    // shape, and `import spark.implicits._` supplies the encoder for the result.
+//    val summaries: Dataset[PersonSummary] = people.map { p =>
+//      PersonSummary(
+//        name = p.name,
+//        ageGroup = if (p.age < 35) "under-35" else "35-plus",
+//        emailDomain = p.email.split("@").last
+//      )
+//    }
+//
+//    println("Summaries (typed, via map):")
+//    summaries.printSchema()
+//    summaries.show(truncate = false)
+//
+//    // Untyped route: the same frame from column expressions. No case class needed,
+//    // but a typo in a column name only blows up at runtime.
+//    val summariesDf: DataFrame = people.toDF().select(
+//      col("name"),
+//      when(col("age") < 35, "under-35").otherwise("35-plus").as("ageGroup"),
+//      substring_index(col("email"), "@", -1).as("emailDomain")
+//    )
+//
+//    println("Summaries (untyped, via select):")
+//    summariesDf.show(truncate = false)
 
     spark.stop()
   }
