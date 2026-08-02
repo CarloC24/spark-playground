@@ -11,3 +11,4 @@ project/project/
 metastore_db/
 spark-warehouse/
 derby.log
+data/

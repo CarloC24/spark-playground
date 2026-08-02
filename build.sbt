@@ -29,8 +29,14 @@ lazy val root = (project in file("."))
     name := "spark-playground",
     libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-core" % sparkVersion,
-      "org.apache.spark" %% "spark-sql"  % sparkVersion
+      "org.apache.spark" %% "spark-sql"  % sparkVersion,
+      "org.scalatest"    %% "scalatest"  % "3.2.19" % Test
     ),
+
+    // There are two Scala main classes now — the ETL pipeline and the original demo —
+    // so a bare `sbt run` would be ambiguous. Pin the pipeline as the default; reach the
+    // demo with `sbt "runMain playground.ParsePeople"`.
+    Compile / run / mainClass := Some("playground.etl.PeoplePipeline"),
     // Maven owns src/main/java (see pom.xml); sbt compiles only Scala. Without this,
     // sbt also picks up the Java sources and `sbt run` becomes ambiguous because it
     // finds two main classes.
@@ -39,5 +45,7 @@ lazy val root = (project in file("."))
     // Spark must run in its own JVM so the --add-opens flags above take effect.
     run / fork    := true,
     Test / fork   := true,
+    // All suites share one SparkSession (see SparkTestSession), so run them in sequence.
+    Test / parallelExecution := false,
     javaOptions ++= sparkJavaOptions
   )

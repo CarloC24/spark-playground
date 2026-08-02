@@ -12,19 +12,8 @@ import org.apache.spark.sql.functions.{
   trim,
   when
 }
-import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-
-case class Hobby(hobbieName: String)
-
-case class Person(
-    id: Long,
-    name: String,
-    email: String,
-    age: Int,
-    city: String,
-    hobbies: Seq[Hobby]
-)
+import playground.etl.{Hobby, Person, Schemas}
 
 /** A reshaped view of [[Person]]: fewer fields, two of them derived. */
 case class PersonSummary(
@@ -45,29 +34,8 @@ object ParsePeople {
   private def asJson(hobbies: Seq[Hobby]): String =
     hobbies.map(h => s"""{"hobbieName":"${h.hobbieName}"}""").mkString("[", ",", "]")
 
-  /** The shape every row's hobbies column ends up in, no matter what the JSON held. */
-  private val hobbiesType = ArrayType(new StructType().add("hobbieName", StringType))
-
-  /**
-   * Read schema. Two things here are deliberate and both are forced on us by the data:
-   *
-   *  - `hobbies` is declared twice, once per spelling. JacksonParser resolves JSON keys
-   *    with `StructType.getFieldIndex`, which is case-sensitive, and it ignores
-   *    `spark.sql.caseSensitive` entirely. Declaring only one spelling silently yields
-   *    null for the rows that use the other.
-   *  - Both are `StringType`, not the real array type. An `ArrayType` converter only
-   *    accepts a START_ARRAY token, so the rows holding a bare `{...}` would parse as
-   *    null. Asking for a string instead makes the parser hand back the raw JSON source
-   *    text, which is the one representation both shapes survive as.
-   */
-  private val readSchema = new StructType()
-    .add("id", LongType)
-    .add("name", StringType)
-    .add("email", StringType)
-    .add("age", IntegerType)
-    .add("city", StringType)
-    .add("hobbies", StringType)
-    .add("Hobbies", StringType)
+  // The read schema and the reasoning behind its two oddities now live in
+  // playground.etl.Schemas, shared with the ETL pipeline.
 
   def main(args: Array[String]): Unit = {
     val input = args.headOption.getOrElse(defaultInput)
@@ -95,7 +63,7 @@ object ParsePeople {
     val raw: DataFrame = spark.read
       // The file is a pretty-printed JSON array, not one object per line.
       .option("multiLine", value = true)
-      .schema(readSchema)
+      .schema(Schemas.jsonReadSchema)
       .json(input)
 
     // Whichever spelling this row used, as raw JSON text.
@@ -115,7 +83,7 @@ object ParsePeople {
         col("email"),
         col("age"),
         col("city"),
-        from_json(hobbiesJson, hobbiesType).as("hobbies")
+        from_json(hobbiesJson, Schemas.hobbiesType).as("hobbies")
       )
       .as[Person]
     println("spark project")
