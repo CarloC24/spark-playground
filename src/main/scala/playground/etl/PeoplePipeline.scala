@@ -5,17 +5,16 @@ import org.apache.spark.sql.functions.{col, to_json}
 
 /**
  * Reads people from JSON, from a Hive-partitioned Parquet directory, or from a Postgres
- * table; derives a few columns; and writes partitioned Parquet or a Postgres table.
+ * table; derives a few columns; and writes partitioned Parquet back out.
  *
  * {{{
  * sbt run
  * sbt "run --input data/warehouse/people_enriched --output data/warehouse/people_reprocessed"
- * sbt "run --format postgres --output-format postgres"      # needs: docker compose up -d
+ * sbt "run --format postgres"      # needs: docker compose up -d
  * }}}
  *
  * The second form reads the first form's output, which is the point: every input path
- * converges on the same `Dataset[Person]` before [[Transform]] ever sees them, and every
- * output path starts from the same `Dataset[PersonEnriched]`.
+ * converges on the same `Dataset[Person]` before [[Transform]] ever sees them.
  */
 object PeoplePipeline {
 
@@ -57,10 +56,7 @@ object PeoplePipeline {
       enriched.withColumn("hobbies", to_json(col("hobbies"))).show(truncate = false)
 
       Load(enriched, config)
-      config.outputFormat match {
-        case "postgres" => println(s"Wrote ${enriched.count()} rows to Postgres table ${config.output}")
-        case _          => println(s"Wrote Parquet to ${config.output}, partitioned by ${config.partitionBy}")
-      }
+      println(s"Wrote Parquet to ${config.output}, partitioned by ${config.partitionBy}")
     } finally {
       spark.stop()
     }

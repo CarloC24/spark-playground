@@ -3,9 +3,9 @@
 Three things live here.
 
 **An ETL pipeline** (`playground.etl`, Scala) — reads person records from JSON, from a
-Hive-partitioned Parquet directory, *or* from a Postgres table; derives a few columns; and
-writes partitioned Parquet or a Postgres table back out. This is what `sbt run` runs.
-Postgres runs in Docker (`docker-compose.yml`).
+Hive-partitioned Parquet directory, *or* from a Postgres table, derives a few columns, and
+writes partitioned Parquet back out. This is what `sbt run` runs. Postgres runs in Docker
+(`docker-compose.yml`).
 
 **The same small job written twice**, once in Scala and once in Java — a side-by-side
 language comparison, and where the JSON parsing tricks the pipeline reuses were worked out.
@@ -20,7 +20,7 @@ Everything shares Spark 4.2.0, JDK 21, and `src/main/resources/`.
 ## ETL pipeline
 
 ```sh
-sbt test    # 41 tests; the 7 Postgres ones cancel themselves if the database is not up
+sbt test    # 35 tests; the 4 Postgres ones cancel themselves if the database is not up
 sbt run     # people.json -> data/warehouse/people_enriched/city=*/
 ```
 
@@ -30,25 +30,22 @@ Then read that output back — the same pipeline, now on the Parquet path:
 sbt "run --input data/warehouse/people_enriched --output data/warehouse/people_reprocessed"
 ```
 
-And the same pipeline against Postgres. Start the database first; the first start also
-creates and seeds the tables from `docker/postgres/init.sql`:
+And the same pipeline reading from Postgres. Start the database first; the first start also
+creates and seeds the `people` table from `docker/postgres/init.sql`:
 
 ```sh
 docker compose up -d
-sbt "run --format postgres --output-format postgres"      # people table -> people_enriched table
-sbt "run --output-format postgres"                        # people.json  -> people_enriched table
-sbt "run --format postgres --input people_enriched --output data/warehouse/people_from_pg"
-docker compose exec postgres psql -U spark -d playground -c 'SELECT * FROM people_enriched ORDER BY id'
+sbt "run --format postgres"     # people table -> data/warehouse/people_enriched/city=*/
+docker compose exec postgres psql -U spark -d playground -c 'SELECT * FROM people ORDER BY id'
 ```
 
 | Option | Default | |
 |---|---|---|
 | `--input <path\|table>` | `src/main/resources/people.json`, or `people` for postgres | file (JSON), directory (Parquet), or table (Postgres) |
 | `--format json\|parquet\|postgres` | inferred from the input path | postgres is never inferred |
-| `--output <dir\|table>` | `data/warehouse/people_enriched`, or `people_enriched` for postgres | |
-| `--output-format parquet\|postgres` | `parquet` | |
-| `--partition-by <col>` | `city` | any column of the output; Parquet only |
-| `--jdbc-url <url>` | `jdbc:postgresql://localhost:5432/playground?stringtype=unspecified` | |
+| `--output <dir>` | `data/warehouse/people_enriched` | |
+| `--partition-by <col>` | `city` | any column of the output |
+| `--jdbc-url <url>` | `jdbc:postgresql://localhost:5432/playground` | |
 | `--jdbc-user`, `--jdbc-password` | `$PGUSER` / `$PGPASSWORD`, else `spark` / `spark` | matches `docker-compose.yml` |
 
 A bare first argument is still taken as the input path, so `sbt "run other.json"` works.
@@ -70,19 +67,18 @@ reader's reshaping step (`Extract.normalizeHobbies`). Normalizing in `Extract` r
 `Transform` is what lets one transform serve every source.
 
 `PipelineRoundTripSpec` is what holds that in place: JSON → Parquet → back, and the two
-`Dataset[Person]`s must come out equal. `PostgresRoundTripSpec` does the same for the
-database: JSON and the `people` table must extract equal, and what `Load` writes must read
-back equal.
+`Dataset[Person]`s must come out equal. `PostgresExtractSpec` does the same for the
+database: JSON and the `people` table must extract equal.
 
 ### Stages
 
 | | |
 |---|---|
-| `PipelineConfig` | eight flags, hand-parsed; no scopt. `JdbcConfig` holds the Postgres connection |
+| `PipelineConfig` | seven flags, hand-parsed; no scopt. `JdbcConfig` holds the Postgres connection |
 | `Schemas` | `Person`, `PersonEnriched`, and the JSON read schema |
 | `Extract` | `fromJson` normalizes; `fromParquet` selects the canonical columns; `fromPostgres` does a partitioned JDBC read and normalizes |
 | `Transform` | adds `ageGroup`, `emailDomain`, `hobbyCount` |
-| `Load` | Parquet: `Overwrite` + `partitionBy`, one file per partition value. Postgres: truncate, then batched JDBC inserts |
+| `Load` | `Overwrite` + `partitionBy`, one file per partition value |
 
 Two details that bite if you change them:
 
@@ -101,12 +97,11 @@ Two details that bite if you change them:
 
 `docker-compose.yml` runs `postgres:17-alpine` with a database `playground` and user
 `spark`/`spark`. `docker/postgres/init.sql` runs once, on the first start of an empty data
-volume, and creates two tables: `people`, the source, seeded with the same 5 records as
-`people.json`, and `people_enriched`, the sink, empty. `docker compose down -v` wipes the
-volume so the script runs again.
+volume, and creates the `people` table, seeded with the same 5 records as `people.json`.
+`docker compose down -v` wipes the volume so the script runs again.
 
-The source table stores `hobbies` as `jsonb`, and deliberately in both shapes the JSON file
-uses (an array of objects, or a bare object), so the reader has the same reshaping to do.
+The table stores `hobbies` as `jsonb`, and deliberately in both shapes the JSON file uses
+(an array of objects, or a bare object), so the reader has the same reshaping to do.
 
 **Reading** (`Extract.fromPostgres`) goes through Spark's built-in JDBC source and its
 `PostgresDialect`, which maps `bigint`/`integer`/`text`/`jsonb` to `Long`/`Int`/`String`/
@@ -120,29 +115,21 @@ uses (an array of objects, or a bare object), so the reader has the same reshapi
 - With the default `fetchsize` of 0 the Postgres driver materializes the whole result set
   before returning the first row. Any positive value makes it stream with a cursor.
 
-**Writing** (`Load.toPostgres`) needs three adjustments before the JDBC write:
-
-- `hobbies` becomes JSON text via `to_json`. The dialect can write arrays of primitives, not
-  arrays of structs. It still lands in a `jsonb` column because the JDBC URL carries
-  `stringtype=unspecified`: without it the driver sends strings as `varchar`, and Postgres
-  refuses to assign varchar to jsonb; with it the parameter type is left open and Postgres
-  infers it from the column.
-- Column names become snake_case (`age_group`, ...). Spark double-quotes identifiers in
-  the SQL it generates, so an `ageGroup` column would create or match only a case-sensitive
-  `"ageGroup"` column that every later query has to quote.
-- `truncate=true` with `Overwrite`. Overwrite drops and recreates the table by default,
-  which would lose the `jsonb` type and the primary key. Truncating keeps the DDL and just
-  empties the rows, and reruns stay idempotent.
-
-`PostgresRoundTripSpec` needs the Compose database. When it cannot connect, its tests are
-**canceled**, not failed, so `sbt test` stays green without Docker. It writes to a scratch
-table it creates and drops itself, never to `people_enriched`. `PG_JDBC_URL`, `PGUSER` and
-`PGPASSWORD` point it at another server.
+`PostgresExtractSpec` needs the Compose database. When it cannot connect, its tests are
+**canceled**, not failed, so `sbt test` stays green without Docker. `PG_JDBC_URL`, `PGUSER`
+and `PGPASSWORD` point it at another server.
 
 Deliberately not built, since this is a playground: `_corrupt_record` quarantine,
-data-quality assertions, `partitionOverwriteMode=dynamic` for per-partition rather than
-whole-directory overwrite, and a real upsert into Postgres (`INSERT ... ON CONFLICT`), which
-Spark's JDBC writer cannot express and would need a `foreachPartition` with hand-written SQL.
+data-quality assertions, and `partitionOverwriteMode=dynamic` for per-partition rather than
+whole-directory overwrite.
+
+Also not built yet: a Postgres **sink**. Writing back through Spark's JDBC writer needs three
+things the reader does not. `hobbies` has to go over as JSON text (`to_json`), because the
+dialect can write arrays of primitives but not arrays of structs, and the URL then needs
+`stringtype=unspecified` for that string to land in a `jsonb` column. Column names should be
+snake_case, because Spark double-quotes identifiers and an `ageGroup` column would become a
+case-sensitive `"ageGroup"` that every query has to quote. And `Overwrite` should carry
+`truncate=true`, so reruns keep the table's DDL instead of dropping and recreating it.
 
 ## Scala vs. Java
 
@@ -220,7 +207,7 @@ pom.xml                                         Java build
 .sbtopts                                        pins sbt to JDK 21
 project/build.properties                        sbt version
 docker-compose.yml                              Postgres for the pipeline
-docker/postgres/init.sql                        creates and seeds the two tables
+docker/postgres/init.sql                        creates and seeds the people table
 docs/lakehouse-project.md                       the next project: a lakehouse format on Parquet
 src/main/resources/people.json                  the 5 records (shared)
 src/main/resources/log4j2.properties            quiets Spark's logging (shared)

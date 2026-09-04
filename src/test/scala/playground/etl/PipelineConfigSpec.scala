@@ -10,7 +10,6 @@ class PipelineConfigSpec extends AnyFunSuite {
     assert(c.input == PipelineConfig.DefaultInput)
     assert(c.format == "json")
     assert(c.output == PipelineConfig.DefaultOutput)
-    assert(c.outputFormat == "parquet")
     assert(c.partitionBy == "city")
   }
 
@@ -31,19 +30,14 @@ class PipelineConfigSpec extends AnyFunSuite {
   }
 
   test("--format postgres with an explicit --input keeps the table name given") {
-    val c = PipelineConfig.parse(Array("--format", "postgres", "--input", "people_enriched"))
-    assert(c.input == "people_enriched")
+    val c = PipelineConfig.parse(Array("--format", "postgres", "--input", "people_archive"))
+    assert(c.input == "people_archive")
   }
 
-  test("--output-format postgres defaults the output to the people_enriched table") {
-    val c = PipelineConfig.parse(Array("--output-format", "postgres"))
-    assert(c.outputFormat == "postgres")
-    assert(c.output == "people_enriched")
-  }
-
-  test("an explicit --output is never replaced by a table default") {
-    val c = PipelineConfig.parse(Array("--output-format", "postgres", "--output", "somewhere"))
+  test("--output and --partition-by are taken as given") {
+    val c = PipelineConfig.parse(Array("--output", "somewhere", "--partition-by", "ageGroup"))
     assert(c.output == "somewhere")
+    assert(c.partitionBy == "ageGroup")
   }
 
   test("jdbc flags override the defaults, other fields untouched") {
@@ -53,18 +47,9 @@ class PipelineConfigSpec extends AnyFunSuite {
     assert(c.jdbc == JdbcConfig("jdbc:postgresql://db:5432/x", "u", "p"))
   }
 
-  test("the default JDBC URL leaves parameter types open so strings can land in jsonb") {
-    assert(JdbcConfig.DefaultUrl.contains("stringtype=unspecified"))
-  }
-
-  test("an unsupported input format is rejected") {
+  test("an unsupported format is rejected") {
     val e = intercept[IllegalArgumentException](PipelineConfig.parse(Array("--format", "csv")))
     assert(e.getMessage.startsWith("unsupported format: csv"))
-  }
-
-  test("an unsupported output format is rejected") {
-    val e = intercept[IllegalArgumentException](PipelineConfig.parse(Array("--output-format", "json")))
-    assert(e.getMessage.startsWith("unsupported output format: json"))
   }
 
   test("an unknown flag is rejected") {

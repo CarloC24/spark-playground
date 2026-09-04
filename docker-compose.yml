@@ -1,4 +1,4 @@
-# Postgres for the pipeline's `--format postgres` / `--output-format postgres` paths.
+# Postgres for the pipeline's `--format postgres` source.
 #
 #   docker compose up -d          start (first start also runs docker/postgres/init.sql)
 #   docker compose exec postgres psql -U spark -d playground

@@ -1,20 +1,16 @@
 package playground.etl
 
 /**
- * How to reach Postgres. Shared by [[Extract.fromPostgres]] and [[Load.toPostgres]].
+ * How to reach Postgres. Used by [[Extract.fromPostgres]].
  *
- * @param url      JDBC URL. The default carries `stringtype=unspecified`, which is what
- *                 lets a Spark string column land in a `jsonb` column: without it the
- *                 driver sends every string as `varchar`, and Postgres refuses to assign
- *                 varchar to jsonb. With it the driver leaves the parameter type open and
- *                 Postgres infers it from the target column.
+ * @param url      JDBC URL
  * @param user     database user
  * @param password database password. Fine on the command line for a local playground;
  *                 anywhere real, use the `PGPASSWORD` environment fallback instead.
  */
 case class JdbcConfig(url: String, user: String, password: String) {
 
-  /** The options every JDBC read and write starts from. */
+  /** The options every JDBC read starts from. */
   def options: Map[String, String] = Map(
     "url"      -> url,
     "user"     -> user,
@@ -24,7 +20,7 @@ case class JdbcConfig(url: String, user: String, password: String) {
 }
 
 object JdbcConfig {
-  val DefaultUrl = "jdbc:postgresql://localhost:5432/playground?stringtype=unspecified"
+  val DefaultUrl = "jdbc:postgresql://localhost:5432/playground"
 
   /** Matches docker-compose.yml. `PGUSER`/`PGPASSWORD` override, as they do for psql. */
   val default: JdbcConfig = JdbcConfig(
@@ -35,32 +31,28 @@ object JdbcConfig {
 }
 
 /**
- * @param input        what to read: a file (json), a directory (parquet), or a table (postgres)
- * @param format       "json", "parquet", or "postgres"; inferred from `input` when not given
- * @param output       where to write: a directory (parquet) or a table (postgres)
- * @param outputFormat "parquet" or "postgres"
- * @param partitionBy  column to partition Parquet output by; ignored for postgres
- * @param jdbc         Postgres connection, used only when either format is "postgres"
+ * @param input       what to read: a file (json), a directory (parquet), or a table (postgres)
+ * @param format      "json", "parquet", or "postgres"; inferred from `input` when not given
+ * @param output      directory to write partitioned Parquet into
+ * @param partitionBy column to partition the output by
+ * @param jdbc        Postgres connection, used only when `format` is "postgres"
  */
 case class PipelineConfig(
     input: String,
     format: String,
     output: String,
-    outputFormat: String,
     partitionBy: String,
     jdbc: JdbcConfig
 )
 
 object PipelineConfig {
 
-  val DefaultInput        = "src/main/resources/people.json"
-  val DefaultOutput       = "data/warehouse/people_enriched"
-  val DefaultInputTable   = "people"
-  val DefaultOutputTable  = "people_enriched"
-  val DefaultPartitionBy  = "city"
+  val DefaultInput       = "src/main/resources/people.json"
+  val DefaultInputTable  = "people"
+  val DefaultOutput      = "data/warehouse/people_enriched"
+  val DefaultPartitionBy = "city"
 
-  val InputFormats  = Set("json", "parquet", "postgres")
-  val OutputFormats = Set("parquet", "postgres")
+  val Formats = Set("json", "parquet", "postgres")
 
   private val Usage =
     """Usage: PeoplePipeline [input] [options]
@@ -68,11 +60,9 @@ object PipelineConfig {
       |  --input <path|table>    what to read                (default: src/main/resources/people.json,
       |                                                        or the `people` table for --format postgres)
       |  --format <fmt>          json | parquet | postgres   (default: inferred from the input path)
-      |  --output <dir|table>    where to write              (default: data/warehouse/people_enriched,
-      |                                                        or the `people_enriched` table for postgres)
-      |  --output-format <fmt>   parquet | postgres          (default: parquet)
-      |  --partition-by <col>    Parquet partition column    (default: city)
-      |  --jdbc-url <url>        Postgres JDBC URL           (default: jdbc:postgresql://localhost:5432/playground?stringtype=unspecified)
+      |  --output <dir>          where to write Parquet      (default: data/warehouse/people_enriched)
+      |  --partition-by <col>    output partition column     (default: city)
+      |  --jdbc-url <url>        Postgres JDBC URL           (default: jdbc:postgresql://localhost:5432/playground)
       |  --jdbc-user <user>      Postgres user               (default: $PGUSER, else spark)
       |  --jdbc-password <pw>    Postgres password           (default: $PGPASSWORD, else spark)
       |""".stripMargin
@@ -91,12 +81,11 @@ object PipelineConfig {
     val (positional, flags) = args.span(!_.startsWith("--"))
     if (positional.length > 1) fail(s"unexpected argument: ${positional(1)}")
 
-    var input        = positional.headOption
-    var format       = Option.empty[String]
-    var output       = Option.empty[String]
-    var outputFormat = "parquet"
-    var partitionBy  = DefaultPartitionBy
-    var jdbc         = JdbcConfig.default
+    var input       = positional.headOption
+    var format      = Option.empty[String]
+    var output      = DefaultOutput
+    var partitionBy = DefaultPartitionBy
+    var jdbc        = JdbcConfig.default
 
     def value(rest: List[String], flag: String): String =
       rest.headOption.getOrElse(fail(s"$flag needs a value"))
@@ -105,8 +94,7 @@ object PipelineConfig {
       case Nil                     => ()
       case "--input" :: t          => input = Some(value(t, "--input")); loop(t.drop(1))
       case "--format" :: t         => format = Some(value(t, "--format")); loop(t.drop(1))
-      case "--output" :: t         => output = Some(value(t, "--output")); loop(t.drop(1))
-      case "--output-format" :: t  => outputFormat = value(t, "--output-format"); loop(t.drop(1))
+      case "--output" :: t         => output = value(t, "--output"); loop(t.drop(1))
       case "--partition-by" :: t   => partitionBy = value(t, "--partition-by"); loop(t.drop(1))
       case "--jdbc-url" :: t       => jdbc = jdbc.copy(url = value(t, "--jdbc-url")); loop(t.drop(1))
       case "--jdbc-user" :: t      => jdbc = jdbc.copy(user = value(t, "--jdbc-user")); loop(t.drop(1))
@@ -115,16 +103,14 @@ object PipelineConfig {
     }
     loop(flags.toList)
 
-    // The input format is inferred from the path, so it has to be settled before the
-    // default input is chosen: a table name has no extension to infer from.
+    // The format is inferred from the path, so it has to be settled before the default
+    // input is chosen: a table name has no extension to infer from.
     val fmt = format.getOrElse(input.map(inferFormat).getOrElse("json"))
-    if (!InputFormats(fmt)) fail(s"unsupported format: $fmt")
-    if (!OutputFormats(outputFormat)) fail(s"unsupported output format: $outputFormat")
+    if (!Formats(fmt)) fail(s"unsupported format: $fmt")
 
-    val in  = input.getOrElse(if (fmt == "postgres") DefaultInputTable else DefaultInput)
-    val out = output.getOrElse(if (outputFormat == "postgres") DefaultOutputTable else DefaultOutput)
+    val in = input.getOrElse(if (fmt == "postgres") DefaultInputTable else DefaultInput)
 
-    PipelineConfig(in, fmt, out, outputFormat, partitionBy, jdbc)
+    PipelineConfig(in, fmt, output, partitionBy, jdbc)
   }
 
   private def fail(message: String): Nothing =
