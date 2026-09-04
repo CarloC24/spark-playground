@@ -1,0 +1,31 @@
+# Postgres for the pipeline's `--format postgres` source.
+#
+#   docker compose up -d          start (first start also runs docker/postgres/init.sql)
+#   docker compose exec postgres psql -U spark -d playground
+#   docker compose down           stop, keep data
+#   docker compose down -v        stop and wipe, so init.sql runs again next time
+#
+# Credentials are deliberately trivial: this is a local playground, not a deployment.
+# PipelineConfig's defaults match these, so `sbt "run --format postgres"` needs no flags.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: spark-playground-postgres
+    environment:
+      POSTGRES_DB: playground
+      POSTGRES_USER: spark
+      POSTGRES_PASSWORD: spark
+    ports:
+      - "5432:5432"
+    volumes:
+      # Scripts in this directory run once, in name order, when the data volume is empty.
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spark -d playground"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  pgdata:

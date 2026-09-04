@@ -15,7 +15,7 @@ class PipelineRoundTripSpec extends SparkSessionTestBase {
     Files.createTempDirectory("people-etl-").resolve("people_enriched").toString
 
   private lazy val config =
-    PipelineConfig(peopleJson, "json", outputDir, PipelineConfig.DefaultPartitionBy)
+    PipelineConfig(peopleJson, "json", outputDir, PipelineConfig.DefaultPartitionBy, JdbcConfig.default)
 
   /** Extracted from JSON, then written out as partitioned Parquet. Runs once. */
   private lazy val fromJson: Seq[Person] = {

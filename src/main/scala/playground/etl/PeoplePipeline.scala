@@ -4,16 +4,17 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, to_json}
 
 /**
- * Reads people from JSON or from a Hive-partitioned Parquet directory, derives a few
- * columns, and writes partitioned Parquet back out.
+ * Reads people from JSON, from a Hive-partitioned Parquet directory, or from a Postgres
+ * table; derives a few columns; and writes partitioned Parquet back out.
  *
  * {{{
  * sbt run
  * sbt "run --input data/warehouse/people_enriched --output data/warehouse/people_reprocessed"
+ * sbt "run --format postgres"      # needs: docker compose up -d
  * }}}
  *
- * The second form reads the first form's output, which is the point: both input paths
- * converge on the same `Dataset[Person]` before [[Transform]] ever sees them.
+ * The second form reads the first form's output, which is the point: every input path
+ * converges on the same `Dataset[Person]` before [[Transform]] ever sees them.
  */
 object PeoplePipeline {
 

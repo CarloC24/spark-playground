@@ -30,6 +30,9 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-core" % sparkVersion,
       "org.apache.spark" %% "spark-sql"  % sparkVersion,
+      // JDBC driver for the Postgres source/sink. Spark ships the generic JDBC data source
+      // and a PostgresDialect, but not the driver itself.
+      "org.postgresql"    % "postgresql" % "42.7.7",
       "org.scalatest"    %% "scalatest"  % "3.2.19" % Test
     ),
 
