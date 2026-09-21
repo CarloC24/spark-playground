@@ -1,0 +1,23 @@
+# Build output
+target/
+project/target/
+project/project/
+*.class
+
+# Build servers and IDEs
+.bsp/
+.bloop/
+.metals/
+.idea/
+.vscode/
+project/metals.sbt
+
+# Spark local state
+metastore_db/
+spark-warehouse/
+derby.log
+*.log
+
+# Local data and notes
+data/
+docs/
