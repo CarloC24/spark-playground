@@ -2,6 +2,8 @@ ThisBuild / organization := "playground"
 ThisBuild / version      := "0.1.0"
 ThisBuild / scalaVersion := "2.13.18"
 Compile / run / mainClass := Some("playground.SparkPostgres")
+Test / fork := true
+Test / parallelExecution := false
 
 val sparkVersion = "4.2.0"
 
@@ -30,7 +32,8 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-core" % sparkVersion,
       "org.apache.spark" %% "spark-sql"  % sparkVersion,
-      "org.postgresql"    % "postgresql" % "42.7.7"
+      "org.postgresql"    % "postgresql" % "42.7.7",
+      "org.scalatest" %% "scalatest" % "3.2.19" % Test
     ),
     run / fork := true,
     javaOptions ++= sparkJavaOptions
